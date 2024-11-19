@@ -273,16 +273,6 @@ def login():
         logger.error(f"Error during login: {str(e)}")  # エラー内容をログに記録
         return jsonify({'error': str(e), 'success': False}), 500
 
-# ログアウト処理
-@app.route('/logout', methods=['POST'])
-def logout():
-    try:
-        response = make_response(jsonify({'message': 'Logged out successfully', 'success': True}))
-        response.set_cookie('myapp_token', '', expires=0, httponly=True, secure=False)
-        return response
-    except Exception as e:
-        return jsonify({'error': str(e), 'success': False}), 500
-
 # 特別ページ（認証されたユーザー専用）
 @app.route('/special', methods=['GET'])
 @token_required
@@ -295,5 +285,101 @@ def special():
 def required(name, id):
     return jsonify({'name': name, 'id': id})
 
+@app.route('/logout', methods=['POST'])
+def logout():
+    try:
+        response = make_response(jsonify({'message': 'Logged out successfully', 'success': True}))
+        response.set_cookie('myapp_token', '', expires=0, httponly=True, secure=False)
+        return response
+    except Exception as e:
+        return jsonify({'error': str(e), 'success': False}), 500
+
+@app.route('/mypage', methods=['GET'])
+def get_mypage():
+    try:
+        # クエリパラメータからデータを取得
+        name = request.args.get('name')
+        user_id = request.args.get('id')
+
+        if not name or not user_id:
+            return jsonify({"error": "入力が無効です"}), 400
+
+        cur = mysql.connection.cursor()
+        
+        # 投稿数とheartの合計を取得
+        query = """
+            SELECT COUNT(name) AS sum, COALESCE(SUM(heart), 0) AS total_heart
+            FROM card
+            WHERE userid = (
+                SELECT userid
+                FROM account
+                WHERE user = %s AND userid = %s
+            );
+        """
+        cur.execute(query, (name, user_id))
+        
+        # データの取得
+        result = cur.fetchone()
+        cur.close()
+        
+        # 結果をJSON形式で返す
+        return jsonify(result)
+    
+    except Exception as e:
+        return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
+
+@app.route('/card/detail',methods=['GET'])
+def detail():
+    try:
+        card_id = request.args.get('id')
+        if not card_id:
+            return jsonify({"error":"入力が無効です"}),400
+        cur = mysql.connection.cursor()
+        query ="""
+        SELECT card.*, account.user
+        FROM card
+        JOIN account ON card.userid = account.userid
+        WHERE card.cardid = %s;
+        """
+        cur.execute(query,(card_id,))
+        result = cur.fetchone()
+        cur.close()
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
+@app.route('/mk',methods =['GET'])
+def mk():
+    try:
+        cur = mysql.connection.cursor()
+        query ="""
+        select detail from card where cardid = 8;
+        """
+        cur.execute(query)
+        result = cur.fetchone()
+        cur.close()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error":str(e)}),500
+    
+@app.route('/user_ranking',methods=['GET'])
+def rank():
+    try:
+        cur = mysql.connection.cursor()
+        query = """
+        SELECT account.user, SUM(card.heart) AS total_hearts
+        FROM card
+        JOIN account ON card.userid = account.userid
+        GROUP BY account.user
+        ORDER BY total_hearts DESC
+        LIMIT 3;
+        """
+        cur.execute(query)
+        result = cur.fetchall()
+        cur.close()
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
