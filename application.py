@@ -224,6 +224,22 @@ def account_add():
     else:
         return jsonify({'success': False}), 210
 
+@app.route('/card/add',methods = ['POST'])
+def card_add():
+    cur = mysql.connection.cursor()
+    data = request.json
+    {'success':False}
+    name = data.get('name')
+    detail = data.get('detail')
+    tag = json.dumps(data.get('tag'))
+    userid = data.get('userid')
+    cur.execute('INSERT INTO card(name,detail,tag,userid) VALUES (%s,%s,%s,%s)',(name,detail,tag,userid))
+    mysql.connection.commit()
+    if cur.rowcount == 1:
+        return jsonify({'succeess':True,'name':name}),200
+    else:
+        return jsonify({'success':False}),210
+
 # ログイン処理
 @app.route('/login', methods=['POST'])
 def login():
