@@ -224,53 +224,38 @@ def account_add():
     else:
         return jsonify({'success': False}), 210
 
-@app.route('/card/add',methods = ['POST'])
-def card_add():
-    cur = mysql.connection.cursor()
-    data = request.json
-    {'success':False}
-    name = data.get('name')
-    detail = data.get('detail')
-    tag = json.dumps(data.get('tag'))
-    userid = data.get('userid')
-    cur.execute('INSERT INTO card(name,detail,tag,userid) VALUES (%s,%s,%s,%s)',(name,detail,tag,userid))
-    mysql.connection.commit()
-    if cur.rowcount == 1:
-        return jsonify({'succeess':True,'name':name}),200
-    else:
-        return jsonify({'success':False}),210
+
 
 # ログイン処理
 @app.route('/login', methods=['POST'])
 def login():
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
     data = request.json
+    
     try:
         if request.method == 'POST':
             user = data.get('name')
             pw = data.get('password')
 
-            # データベース接続を開く
-            connection = get_db_connection()
-            cursor = connection.cursor()
             cursor.execute("SELECT user, pas, userid FROM account WHERE user = %s", (user,))
             data2 = cursor.fetchall()
             cursor.close()
 
-            # ログ出力: データベースの結果を確認
-            logger.debug(f"Database query result: {data2}")
-
             if data2:
                 if data2[0][1] == pw:
-                    # JWTを生成
-                    id = data2[0][2]
+                    if not user or not pw:
+                        return jsonify({'error': 'user and pw are required.'}), 400
+
+                    # JWTを作成 (有効期限を10秒に設定)
+                    id = data2[0][2]  # idを取得
                     payload = {
                         'user': user,
-                        'id': id,
-                        'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=10)  # 有効期限
+                        'id': id,  # idをペイロードに追加
+                        'exp': datetime.datetime.utcnow() + datetime.timedelta(seconds=10000000)  # 現在時刻 +
                     }
                     token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
-                    # トークンの型確認
                     if isinstance(token, bytes):
                         token = token.decode('utf-8')
 
@@ -279,14 +264,8 @@ def login():
 
                     return response
                 else:
-                    logger.error(f"Invalid password for user: {user}")
-                    return jsonify({'success': False}), 401  # Unauthorized
-            else:
-                logger.error(f"User not found: {user}")
-                return jsonify({'error': 'Invalid credentials'}), 404  # Not Found
-
+                    return jsonify({'success': False}), 202
     except Exception as e:
-        logger.error(f"Error during login: {str(e)}")  # エラー内容をログに記録
         return jsonify({'error': str(e), 'success': False}), 500
 
 # 特別ページ（認証されたユーザー専用）
