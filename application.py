@@ -21,13 +21,10 @@ CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
 DB_HOST = 'qiita.mysql.database.azure.com'  # Azure MySQL のホスト
 
 
-# DB_USER = os.getenv('DB_USER')
-# DB_PASSWORD = os.getenv('DB_PASSWORD')
-# DB_NAME = os.getenv('DB_NAME')
+DB_USER = os.getenv('DB_USER')
+DB_PASSWORD = os.getenv('DB_PASSWORD')
+DB_NAME = os.getenv('DB_NAME')
 
-DB_USER = "jugon"
-DB_PASSWORD = "aA85208520"
-DB_NAME = "qiita"
 
 # MySQL 接続関数
 def get_db_connection():
@@ -120,7 +117,7 @@ def get_order_time():
         formatted_data = []
         for row in data:
             # 時間のフォーマットを変更
-            time = row['time'].strftime("%a, %d %b %Y %H:%M:%S GMT") if isinstance(row['time'], datetime.datetime) else row['time']
+            time = row['time'].strftime("%a, %d %b %Y %H:%M:%S GMT") if isinstance(row['time'], datetime) else row['time']
 
             # ローカルデータ形式に合わせて整形
             formatted_data.append([
@@ -170,7 +167,7 @@ def get_order_trend():
         formatted_data = []
         for row in data:
             # 時間のフォーマットを変更
-            time = row['time'].strftime("%a, %d %b %Y %H:%M:%S GMT") if isinstance(row['time'], datetime.datetime) else row['time']
+            time = row['time'].strftime("%a, %d %b %Y %H:%M:%S GMT") if isinstance(row['time'], datetime) else row['time']
 
             # ローカルデータ形式に合わせて整形
             formatted_data.append([
