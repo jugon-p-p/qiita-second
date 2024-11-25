@@ -225,21 +225,47 @@ def account_add():
     else:
         return jsonify({'success': False}), 210
 
-@app.route('/card/add',methods = ['POST'])
+@app.route('/card/add', methods=['POST'])
 def card_add():
-    cur = mysql.connection.cursor()
-    data = request.json
-    {'success':False}
-    name = data.get('name')
-    detail = data.get('detail')
-    tag = json.dumps(data.get('tag'))
-    userid = data.get('userid')
-    cur.execute('INSERT INTO card(name,detail,tag,userid) VALUES (%s,%s,%s,%s)',(name,detail,tag,userid))
-    mysql.connection.commit()
-    if cur.rowcount == 1:
-        return jsonify({'succeess':True,'name':name}),200
-    else:
-        return jsonify({'success':False}),210
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({'success': False, 'message': 'Database connection failed'}), 500
+
+    try:
+        cur = connection.cursor()
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'message': 'Invalid JSON'}), 400
+
+        # 必須フィールドの取得とバリデーション
+        name = data.get('name')
+        detail = data.get('detail')
+        tag = data.get('tag')
+        userid = data.get('userid')
+
+        if not all([name, detail, tag, userid]):
+            return jsonify({'success': False, 'message': 'Missing required fields'}), 400
+
+        # JSON のタグを文字列に変換して保存
+        tag_str = json.dumps(tag)
+
+        # クエリ実行
+        cur.execute(
+            'INSERT INTO card (name, detail, tag, userid) VALUES (%s, %s, %s, %s)',
+            (name, detail, tag_str, userid)
+        )
+        connection.commit()
+
+        if cur.rowcount == 1:
+            return jsonify({'success': True, 'name': name}), 200
+        else:
+            return jsonify({'success': False, 'message': 'Insert failed'}), 500
+    except mysql.connector.Error as e:
+        logger.error(f"Database query failed: {e}")
+        return jsonify({'success': False, 'message': 'Database error'}), 500
+    finally:
+        cur.close()
+        connection.close()
 
 # ログイン処理
 @app.route('/login', methods=['POST'])
