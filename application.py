@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 import mysql.connector
 import jwt
-import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 import json
 import logging
@@ -21,9 +21,13 @@ CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
 DB_HOST = 'qiita.mysql.database.azure.com'  # Azure MySQL のホスト
 
 
-DB_USER = os.getenv('DB_USER')
-DB_PASSWORD = os.getenv('DB_PASSWORD')
-DB_NAME = os.getenv('DB_NAME')
+# DB_USER = os.getenv('DB_USER')
+# DB_PASSWORD = os.getenv('DB_PASSWORD')
+# DB_NAME = os.getenv('DB_NAME')
+
+DB_USER = "jugon"
+DB_PASSWORD = "aA85208520"
+DB_NAME = "qiita"
 
 # MySQL 接続関数
 def get_db_connection():
@@ -224,35 +228,48 @@ def account_add():
     else:
         return jsonify({'success': False}), 210
 
-
+@app.route('/card/add',methods = ['POST'])
+def card_add():
+    cur = mysql.connection.cursor()
+    data = request.json
+    {'success':False}
+    name = data.get('name')
+    detail = data.get('detail')
+    tag = json.dumps(data.get('tag'))
+    userid = data.get('userid')
+    cur.execute('INSERT INTO card(name,detail,tag,userid) VALUES (%s,%s,%s,%s)',(name,detail,tag,userid))
+    mysql.connection.commit()
+    if cur.rowcount == 1:
+        return jsonify({'succeess':True,'name':name}),200
+    else:
+        return jsonify({'success':False}),210
 
 # ログイン処理
 @app.route('/login', methods=['POST'])
 def login():
     connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
     data = request.json
     
     try:
         if request.method == 'POST':
             user = data.get('name')
             pw = data.get('password')
-
+            cursor = connection.cursor(dictionary=True)
             cursor.execute("SELECT user, pas, userid FROM account WHERE user = %s", (user,))
             data2 = cursor.fetchall()
             cursor.close()
 
             if data2:
-                if data2[0][1] == pw:
+                if data2[0]['pas'] == pw:
                     if not user or not pw:
                         return jsonify({'error': 'user and pw are required.'}), 400
 
-                    # JWTを作成 (有効期限を10秒に設定)
-                    id = data2[0][2]  # idを取得
+                    # JWTを作成 (有効期限を2日後に設定)
+                    id = data2[0]['userid']  # idを取得
                     payload = {
                         'user': user,
                         'id': id,  # idをペイロードに追加
-                        'exp': datetime.datetime.utcnow() + datetime.timedelta(seconds=10000000)  # 現在時刻 +
+                        'exp': datetime.utcnow() + timedelta(days=2)  # 2日後に設定
                     }
                     token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
@@ -260,13 +277,29 @@ def login():
                         token = token.decode('utf-8')
 
                     response = make_response(jsonify({'message': 'Token created', 'success': True}))
-                    response.set_cookie('myapp_token', token, httponly=True, secure=False)
+
+                    # 現在時刻から2日後を設定
+                    expires = datetime.utcnow() + timedelta(days=2)
+
+                    # expiresをHTTP日付形式に変換
+                    expires_str = expires.strftime('%a, %d %b %Y %H:%M:%S GMT')
+
+                    # クッキーをセット
+                    response.set_cookie(
+                        'myapp_token', 
+                        token, 
+                        httponly=True, 
+                        secure=True,  # HTTPS通信を使っている場合はTrue
+                        samesite='None',  # クロスサイトリクエストでも送信
+                        expires=expires_str  # expiresを文字列で設定
+                    )
 
                     return response
                 else:
                     return jsonify({'success': False}), 202
     except Exception as e:
         return jsonify({'error': str(e), 'success': False}), 500
+
 
 # 特別ページ（認証されたユーザー専用）
 @app.route('/special', methods=['GET'])
@@ -284,7 +317,7 @@ def required(name, id):
 def logout():
     try:
         response = make_response(jsonify({'message': 'Logged out successfully', 'success': True}))
-        response.set_cookie('myapp_token', '', expires=0, httponly=True, secure=False)
+        response.set_cookie('myapp_token', '', expires=0, httponly=True, secure=True, samesite='None')
         return response
     except Exception as e:
         return jsonify({'error': str(e), 'success': False}), 500
