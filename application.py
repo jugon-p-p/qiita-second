@@ -25,7 +25,6 @@ DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_NAME = os.getenv('DB_NAME')
 
-
 # MySQL 接続関数
 def get_db_connection():
     connection = mysql.connector.connect(
@@ -439,5 +438,150 @@ def rank():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
+
+@app.route('/Getcard',methods=['GET'])
+def get():
+    card_id = request.args.get('id')
+    try:
+        connection = get_db_connection()  
+        cursor = connection.cursor(dictionary=True)
+        query = """
+                    SELECT * 
+                    FROM card 
+                    WHERE cardid = %s;
+                """
+        cursor.execute(query,(card_id,))
+        result = cursor.fetchone()
+        cursor.close()
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
+    
+@app.route('/Fixcard',methods=['PUT'])
+def putCard():
+    data = request.json
+    connection = get_db_connection()
+    cur = connection.cursor()
+    try:
+        name = data.get('name')
+        detail = data.get('detail')
+        tag = json.dumps(data.get('tag'))
+        cardid = data.get('cardid')
+        query = """
+                UPDATE card
+                SET name = %s, detail = %s, tag = %s
+                WHERE cardid = %s
+                """
+        cur.execute(query,(name,detail,tag,cardid,))
+        connection.commit()
+        if cur.rowcount == 1:
+            return jsonify({'succeess':True,'name':name}),200
+    except Exception as e:
+        return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
+
+@app.route('/like', methods=['GET'])
+def like():
+    connection = get_db_connection()
+    cur = connection.cursor()
+    try:
+        userid = request.args.get("userid")
+        cardid = request.args.get("cardid")
+        query = """
+                SELECT * 
+                FROM likes
+                WHERE userid = %s AND cardid = %s
+                """
+        cur.execute(query, (userid, cardid,))
+        
+        # 結果を実際に取得する
+        result = cur.fetchone()
+        if result is not None:
+            return jsonify({'success': False,})
+        else:
+            return jsonify({'success': True,})
+    except Exception as e:
+        return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
+
+@app.route('/like', methods=["POST"])
+def likeadd():
+    connection = get_db_connection()
+    cur = connection.cursor()
+    data = request.json
+    try:
+        userid = data.get("userid")
+        cardid = data.get("cardid")
+
+        # likesテーブルにすでに存在するかを確認
+        check_query = "SELECT COUNT(*) FROM likes WHERE userid = %s AND cardid = %s"
+        cur.execute(check_query, (userid, cardid))
+        like_exists = cur.fetchone()[0]
+
+        if like_exists:
+            return jsonify({"error": "既にいいねされています"}), 400
+
+        # トランザクション開始
+        connection.autocommit = False  # トランザクション開始を明示的に指定
+
+        # likesテーブルに新しいレコードを挿入
+        insert_query = """
+            INSERT INTO likes (userid, cardid)
+            VALUES (%s, %s)
+        """
+        cur.execute(insert_query, (userid, cardid))
+
+        # cardテーブルのheartカウントをインクリメント
+        update_query = """
+            UPDATE card
+            SET heart = heart + 1
+            WHERE cardid = %s
+        """
+        cur.execute(update_query, (cardid,))
+
+        # トランザクションコミット
+        connection.commit()
+
+        return jsonify({"success": True, "message": "いいねが追加されました"}), 200
+    except Exception as e:
+        # トランザクションロールバック
+        connection.rollback()
+        return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
+    finally:
+        cur.close()
+        
+@app.route("/like", methods=["DELETE"])
+def likedel():
+    cardid = request.args.get("cardid")
+    userid = request.args.get("userid")
+    try:
+        connection = get_db_connection()
+        cur = connection.cursor()
+        
+        # likesテーブルから指定されたuseridとcardidのレコードを削除
+        delete_query = """
+                DELETE FROM likes
+                WHERE userid = %s AND cardid = %s
+        """
+        cur.execute(delete_query, (userid, cardid))
+        
+        # cardテーブルのheartを1減らす
+        update_query = """
+                UPDATE card
+                SET heart = heart - 1
+                WHERE cardid = %s
+        """
+        cur.execute(update_query, (cardid,))
+        
+        # トランザクションをコミット
+        connection.commit()
+        
+        return jsonify({"success": True, "message": "いいねが削除されました"}), 200
+
+    except Exception as e:
+        # エラーが発生した場合、トランザクションをロールバック
+        mysql.connection.rollback()
+        return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
