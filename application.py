@@ -211,8 +211,8 @@ def account_verification():
 @app.route('/account/add', methods=['POST'])
 def account_add():
     data = request.json
-    user = data['data'][0]
-    pw = data['data'][1]
+    user = data.get("user")
+    pw = data.get("pw")
 
     connection = get_db_connection()
     cursor = connection.cursor()
