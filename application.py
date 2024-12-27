@@ -18,8 +18,7 @@ CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
 
 
 # Azure Database for MySQL 接続設定
-DB_HOST = 'qiita.mysql.database.azure.com'  # Azure MySQL のホスト
-
+DB_HOST = 'qiita.mysql.database.azure.com'  
 
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
@@ -582,6 +581,119 @@ def likedel():
         mysql.connection.rollback()
         return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
 
+@app.route('/name_get', methods=['GET'])
+def name_get():
+    name = request.args.get("user")
+    print(f"Received name parameter: {name}")  # ログに出力
+    
+    try:
+        connection = get_db_connection()
+        cur = connection.cursor()
+
+        query = """
+                    SELECT *
+                    FROM account
+                    WHERE user = %s
+                """
+        cur.execute(query, (name,))
+        result = cur.fetchone()  # 1件だけ取得
+        
+        if cur.rowcount >= 1:
+            return jsonify({"exit":True,"data":result}),200
+        else:
+            return jsonify({"exit":False}),201
+    except Exception as e:
+        return jsonify({"success": "エラーが発生しました", "error": str(e)}), 500
+
+@app.route('/book_get',methods=["GET"])
+def book_get():
+    name = request.args.get("userid")
+    try:
+        connection = get_db_connection()
+        cur = connection.cursor()
+        query = """
+                    SELECT *
+                    FROM bookmarks
+                    where userid = %s
+                """
+        cur.execute(query, (name,))
+        result = cur.fetchall()
+        cur.close()
+        
+        if cur.rowcount >= 1:
+            return jsonify({"exit":True,"data":result}),200
+        else:
+            return jsonify({"exit":False}),201
+    except:
+        return jsonify({"success":'エラーが発生しました'}),500
+
+@app.route('/book_post',methods=["POST"])
+def book_post():
+    data = request.json
+    try:
+        userid = data.get("userid")
+        cardid = data.get("cardid")
+        connection = get_db_connection()
+        cur = connection.cursor()
+        query = """
+                    INSERT INTO bookmarks(userid,cardid)
+                    VALUES(%s,%s)
+                """
+        cur.execute(query, (userid,cardid,))
+        connection.commit()
+        return jsonify({"success":True,"message":"ブックマークに保存しました"})
+    except:
+        return jsonify({"success":False,"message":"ブックマークに保存できていません"})
+    finally:
+        cur.close()
+
+@app.route("/book_del", methods=["DELETE"])
+def book_del():
+    cardid = int(request.args.get("cardid"))  
+    userid = int(request.args.get("userid"))  
+    try:
+        connection = get_db_connection()
+        cur = connection.cursor()
+        
+        # DELETEクエリ
+        query = """
+                    DELETE FROM bookmarks
+                    WHERE userid = %s AND cardid = %s
+                """
+        cur.execute(query, (userid, cardid))
+        connection.commit()
+        
+        if cur.rowcount == 0:
+            return jsonify({"error": "指定されたブックマークは存在しません"}), 404
+
+        return jsonify({"success": True, "message": "ブックマークが削除されました"}), 200
+    except Exception as e:
+        return jsonify({"error": "サーバーエラーが発生しました", "details": str(e)}), 500
+
+
+@app.route("/book_card",methods=["GET"])
+def book_book_card():
+    userid = request.args.get("userid")
+    try:
+        connection = get_db_connection()
+        cur = connection.cursor()
+        query = """
+                    SELECT c.cardid,c.name,c.detail,c.tag,c.heart,c.time, a.user
+                    FROM card c
+                    JOIN bookmarks b ON c.cardid = b.cardid
+                    JOIN account a ON c.userid = a.userid
+                    WHERE b.userid = %s
+                """
+        cur.execute(query, (userid,))
+        result = cur.fetchall()
+        cur.close()
+        
+        if cur.rowcount >= 1:
+            return jsonify({"exit":True,"data":result}),200
+        else:
+            return jsonify({"exit":False}),201
+    except:
+        return jsonify({"success":'エラーが発生しました'}),500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
